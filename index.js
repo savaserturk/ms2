@@ -52,6 +52,11 @@ app.get('/orders', (req, res) => {
   res.json(receivedMessages); // Send the array of received messages as a response
 });
 
+// Health check route
+app.get('/health', (req, res) => {
+    res.json({ message: 'Server is healthy' });
+});
+
 // Start the server using the port from environment variables
 app.listen(PORT, () => {
   console.log(`Order service is running on http://localhost:${PORT}`);
