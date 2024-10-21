@@ -12,42 +12,44 @@ app.use(cors());
 
 // Get the RabbitMQ URL and the port from environment variables
 const RABBITMQ_CONNECTION_STRING = process.env.RABBITMQ_CONNECTION_STRING || 'amqp://localhost';  // Fallback to localhost if not defined
-const PORT = process.env.PORT || 3000;  // Fallback to port 3000 if not defined
+const PORT = process.env.PORT || 4000;  // Fallback to port 3000 if not defined
 
-// Define a POST route for creating orders
-app.post('/orders', (req, res) => {
-  const order = req.body; // Extract the order data from the request body.
-  
-  // Connect to RabbitMQ server
-  amqp.connect(RABBITMQ_CONNECTION_STRING, (err, conn) => {
+// Array to store received messages
+let receivedMessages = [];
+
+// Connect to RabbitMQ server to receive messages
+amqp.connect(RABBITMQ_CONNECTION_STRING, (err, conn) => {
+  if (err) {
+    console.error('Error connecting to RabbitMQ:', err);
+    return;
+  }
+
+  // Create a channel to receive messages
+  conn.createChannel((err, channel) => {
     if (err) {
-      // If an error occurs while connecting to RabbitMQ, send a 500 status and error message.
-      return res.status(500).send('Error connecting to RabbitMQ');
+      console.error('Error creating channel:', err);
+      return;
     }
 
-    // Once connected to RabbitMQ, create a channel to communicate with it.
-    conn.createChannel((err, channel) => {
-      if (err) {
-        // If an error occurs while creating a channel, send a 500 status and error message.
-        return res.status(500).send('Error creating channel');
+    const queue = 'order_queue'; // Queue name
+
+    // Assert (create) the queue if it doesn't already exist
+    channel.assertQueue(queue, { durable: false });
+
+    // Start consuming messages from the queue
+    channel.consume(queue, (msg) => {
+      if (msg !== null) {
+        const order = JSON.parse(msg.content.toString()); // Parse message content
+        receivedMessages.push(order); // Store message in the array
+        console.log('Received order:', order); // Log the received message
       }
-
-      const queue = 'order_queue'; // Define the queue where the order will be sent.
-      const msg = JSON.stringify(order); // Convert the order object to a JSON string.
-
-      // Assert (create) the queue if it doesn't already exist.
-      channel.assertQueue(queue, { durable: false });
-
-      // Send the order message to the queue.
-      channel.sendToQueue(queue, Buffer.from(msg));
-
-      // Log the sent order to the console.
-      console.log("Sent order to queue:", msg);
-
-      // Send a response to the client confirming that the order was received.
-      res.send('Order received');
-    });
+    }, { noAck: true }); // Automatically acknowledge the message
   });
+});
+
+// Define a GET route to return the stored messages
+app.get('/orders', (req, res) => {
+  res.json(receivedMessages); // Send the array of received messages as a response
 });
 
 // Start the server using the port from environment variables
