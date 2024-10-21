@@ -1,63 +1,55 @@
 // Import required modules
-const express = require('express'); // Express is a minimal Node.js framework for building web applications.
-const amqp = require('amqplib/callback_api'); // AMQP (Advanced Message Queuing Protocol) client library for RabbitMQ.
-const cors = require('cors'); // CORS (Cross-Origin Resource Sharing) middleware for handling cross-origin requests.
-require('dotenv').config(); // Load environment variables from .env file in development
+const express = require('express');
+const amqp = require('amqplib/callback_api');
+const cors = require('cors');
+require('dotenv').config();
 
-const app = express(); // Create an Express application instance.
-app.use(express.json()); // Middleware to parse incoming JSON request bodies.
-
-// Enable CORS (Cross-Origin Resource Sharing) for all routes
+const app = express();
+app.use(express.json());
 app.use(cors());
 
-// Get the RabbitMQ URL and the port from environment variables
-const RABBITMQ_CONNECTION_STRING = process.env.RABBITMQ_CONNECTION_STRING || 'amqp://localhost';  // Fallback to localhost if not defined
-const PORT = process.env.PORT || 4000;  // Fallback to port 3000 if not defined
+const RABBITMQ_CONNECTION_STRING = process.env.RABBITMQ_CONNECTION_STRING || 'amqp://localhost';
+const PORT = process.env.PORT || 4000;
 
-// Array to store received messages
 let receivedMessages = [];
 
-// Connect to RabbitMQ server to receive messages
+// Connect to RabbitMQ
 amqp.connect(RABBITMQ_CONNECTION_STRING, (err, conn) => {
   if (err) {
-    console.error('Error connecting to RabbitMQ:', err);
+    console.error('RabbitMQ connection error:', err);
     return;
   }
 
-  // Create a channel to receive messages
   conn.createChannel((err, channel) => {
     if (err) {
-      console.error('Error creating channel:', err);
+      console.error('Channel creation error:', err);
       return;
     }
 
-    const queue = 'order_queue'; // Queue name
+    const queue = 'order_queue';
 
-    // Assert (create) the queue if it doesn't already exist
     channel.assertQueue(queue, { durable: false });
 
-    // Start consuming messages from the queue
     channel.consume(queue, (msg) => {
-      if (msg !== null) {
-        const order = JSON.parse(msg.content.toString()); // Parse message content
-        receivedMessages.push(order); // Store message in the array
-        console.log('Received order:', order); // Log the received message
+      if (msg) {
+        const order = JSON.parse(msg.content.toString());
+        receivedMessages.push(order);
+        console.log('Order received:', order);
       }
-    }, { noAck: true }); // Automatically acknowledge the message
+    }, { noAck: true });
   });
 });
 
-// Define a GET route to return the stored messages
+// Route to return received orders
 app.get('/orders', (req, res) => {
-  res.json(receivedMessages); // Send the array of received messages as a response
+  res.json(receivedMessages);
 });
 
 // Health check route
 app.get('/health', (req, res) => {
-    res.json({ message: 'Server is healthy' });
+  res.json({ message: 'Server is healthy' });
 });
 
-// Start the server using the port from environment variables
 app.listen(PORT, () => {
-  console.log(`Order service is running on http://localhost:${PORT}`);
+  console.log(`Server running at http://localhost:${PORT}`);
 });
